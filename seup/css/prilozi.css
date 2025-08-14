@@ -279,6 +279,10 @@
   font-size: var(--text-xs);
   font-weight: var(--font-medium);
   gap: var(--space-1);
+  white-space: nowrap;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .seup-signature-valid {
@@ -311,6 +315,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  white-space: nowrap;
 }
 
 /* Signature details tooltip */

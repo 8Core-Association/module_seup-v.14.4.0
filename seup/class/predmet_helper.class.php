@@ -476,7 +476,7 @@ class Predmet_helper
                 
                 // Digital signature status
                 $documentTableHTML .= '<td>';
-                if (isset($doc->digital_signature) && $doc->digital_signature) {
+                if (isset($doc->digital_signature) && $doc->digital_signature == 1) {
                     $signatureBadge = Digital_Signature_Detector::getSignatureBadge(
                         true, 
                         $doc->signature_status ?? 'unknown',
@@ -512,14 +512,6 @@ class Predmet_helper
                 $documentTableHTML .= 'title="Obriši dokument">';
                 $documentTableHTML .= '<i class="fas fa-trash"></i>';
                 $documentTableHTML .= '</button>';
-                
-                // Additional Nextcloud indicators
-                if (isset($doc->comments_count) && $doc->comments_count > 0) {
-                    $documentTableHTML .= '<span class="seup-document-badge seup-badge-info" title="Komentari"><i class="fas fa-comments"></i> ' . $doc->comments_count . '</span>';
-                }
-                if (isset($doc->is_shared) && $doc->is_shared) {
-                    $documentTableHTML .= '<span class="seup-document-badge seup-badge-warning" title="Dijeljeno"><i class="fas fa-share-alt"></i></span>';
-                }
                 
                 $documentTableHTML .= '</div>'; // seup-document-actions
                 $documentTableHTML .= '</td>';

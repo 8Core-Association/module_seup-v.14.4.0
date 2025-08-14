@@ -232,7 +232,7 @@ class Digital_Signature_Detector
             
             $signerName = null;
             $signatureDate = null;
-            $signatureStatus = 'unknown';
+            $signatureStatus = $hasSignature ? 'valid' : 'unknown';
 
             if ($hasSignature && isset($signatureData['signature_info'])) {
                 $info = $signatureData['signature_info'];
@@ -255,8 +255,6 @@ class Digital_Signature_Detector
                     $signatureStatus = 'valid';
                 } elseif (isset($info['issuer'])) {
                     $signatureStatus = 'valid';
-                } else {
-                    $signatureStatus = 'unknown';
                 }
             }
 
@@ -468,7 +466,7 @@ class Digital_Signature_Detector
     public static function getSignatureBadge($hasSignature, $signatureStatus = 'unknown', $signerName = null)
     {
         if (!$hasSignature) {
-            return '';
+            return '<span class="seup-signature-none"><i class="fas fa-minus-circle"></i> Nije potpisan</span>';
         }
 
         $badgeClass = 'seup-signature-badge';
@@ -481,8 +479,10 @@ class Digital_Signature_Detector
                 $badgeClass .= ' seup-signature-valid';
                 $icon = 'fas fa-certificate';
                 $title = 'Valjan digitalni potpis';
+                $text = 'Potpisan';
                 if ($signerName) {
                     $title .= ' - ' . $signerName;
+                    $text = 'Potpisan - ' . $signerName;
                 }
                 break;
             case 'invalid':
