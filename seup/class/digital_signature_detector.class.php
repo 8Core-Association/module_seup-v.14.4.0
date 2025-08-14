@@ -89,24 +89,29 @@ class Digital_Signature_Detector
                 $signatureInfo['type'] = 'PDF Digital Signature';
                 $signatureInfo['byte_range'] = trim($byteRangeMatch[1]);
                 $signatureInfo['contents_length'] = strlen($contentsMatch[1]) / 2; // Hex to bytes
+                
+                dol_syslog("PDF signature detected - ByteRange: " . $signatureInfo['byte_range'], LOG_INFO);
             }
 
             // Check for Adobe signature fields
             if (preg_match('/\/Type\s*\/Sig/', $pdfContent)) {
                 $hasSignature = true;
                 $signatureInfo['adobe_signature'] = true;
+                dol_syslog("Adobe signature field detected", LOG_INFO);
             }
 
             // Extract signer information from certificate data
             $signerInfo = self::extractSignerInfo($pdfContent);
             if ($signerInfo) {
                 $signatureInfo = array_merge($signatureInfo, $signerInfo);
+                dol_syslog("Signer info extracted: " . json_encode($signerInfo), LOG_INFO);
             }
 
             // Extract signature date
             $signatureDate = self::extractSignatureDate($pdfContent);
             if ($signatureDate) {
                 $signatureInfo['signature_date'] = $signatureDate;
+                dol_syslog("Signature date extracted: " . $signatureDate, LOG_INFO);
             }
 
             // Validate FINA certificate if present
@@ -115,7 +120,13 @@ class Digital_Signature_Detector
                  strpos($signatureInfo['issuer'], 'FINA') !== false)) {
                 $signatureInfo['ca_type'] = 'FINA';
                 $signatureInfo['is_qualified'] = true;
+                dol_syslog("FINA certificate detected", LOG_INFO);
             }
+
+            dol_syslog("Final signature detection result: " . json_encode([
+                'has_signature' => $hasSignature,
+                'file' => basename($filePath)
+            ]), LOG_INFO);
 
             return [
                 'has_signature' => $hasSignature,
@@ -140,31 +151,36 @@ class Digital_Signature_Detector
     {
         $signerInfo = [];
 
-        // Look for common name (CN) in certificate
-        if (preg_match('/CN=([^,\n\r]+)/', $pdfContent, $cnMatch)) {
+        // Look for common name (CN) in certificate - more specific pattern
+        if (preg_match('/CN=([^,\n\r\)]+)/', $pdfContent, $cnMatch)) {
             $signerInfo['signer_name'] = trim($cnMatch[1]);
+            dol_syslog("Extracted signer name: " . $signerInfo['signer_name'], LOG_DEBUG);
         }
 
-        // Look for organization (O) in certificate
-        if (preg_match('/O=([^,\n\r]+)/', $pdfContent, $orgMatch)) {
+        // Look for organization (O) in certificate - more specific pattern
+        if (preg_match('/O=([^,\n\r\)]+)/', $pdfContent, $orgMatch)) {
             $signerInfo['organization'] = trim($orgMatch[1]);
         }
 
-        // Look for issuer information
-        if (preg_match('/Issuer.*?CN=([^,\n\r]+)/', $pdfContent, $issuerMatch)) {
+        // Look for issuer information - improved pattern
+        if (preg_match('/Issuer.*?CN=([^,\n\r\)]+)/', $pdfContent, $issuerMatch)) {
             $signerInfo['issuer'] = trim($issuerMatch[1]);
+        } elseif (preg_match('/Fina\s+RDC/', $pdfContent)) {
+            $signerInfo['issuer'] = 'Fina RDC 2020';
+            dol_syslog("FINA issuer detected via pattern match", LOG_DEBUG);
         }
 
-        // Look for email in certificate
-        if (preg_match('/emailAddress=([^,\s\n\r]+)/', $pdfContent, $emailMatch)) {
+        // Look for email in certificate - improved pattern
+        if (preg_match('/emailAddress=([^,\s\n\r\)]+)/', $pdfContent, $emailMatch)) {
             $signerInfo['email'] = trim($emailMatch[1]);
         }
 
-        // Look for serial number
-        if (preg_match('/serialNumber=([^,\s\n\r]+)/', $pdfContent, $serialMatch)) {
+        // Look for serial number - improved pattern
+        if (preg_match('/serialNumber=([^,\s\n\r\)]+)/', $pdfContent, $serialMatch)) {
             $signerInfo['serial_number'] = trim($serialMatch[1]);
         }
 
+        dol_syslog("Extracted signer info: " . json_encode($signerInfo), LOG_DEBUG);
         return empty($signerInfo) ? null : $signerInfo;
     }
 
@@ -175,7 +191,7 @@ class Digital_Signature_Detector
     {
         // Look for signature date in various formats
         $datePatterns = [
-            '/\/M\s*\(D:(\d{14}[+-]\d{2}\'\d{2}\')\)/',  // PDF date format
+            '/\/M\s*\(D:(\d{14})/',  // PDF date format (simplified)
             '/signingTime.*?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/',  // ISO format
             '/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/'  // Standard datetime
         ];
@@ -185,8 +201,8 @@ class Digital_Signature_Detector
                 $dateStr = $dateMatch[1];
                 
                 // Convert PDF date format to standard format
-                if (strpos($dateStr, 'D:') === 0) {
-                    $dateStr = substr($dateStr, 2, 14);
+                if (strlen($dateStr) === 14 && is_numeric($dateStr)) {
+                    // PDF date format: YYYYMMDDHHMMSS
                     $year = substr($dateStr, 0, 4);
                     $month = substr($dateStr, 4, 2);
                     $day = substr($dateStr, 6, 2);
@@ -221,7 +237,18 @@ class Digital_Signature_Detector
             if ($hasSignature && isset($signatureData['signature_info'])) {
                 $info = $signatureData['signature_info'];
                 $signerName = $info['signer_name'] ?? null;
-                $signatureDate = $info['signature_date'] ?? null;
+                
+                // Properly format signature date for MySQL
+                if (isset($info['signature_date'])) {
+                    $dateStr = $info['signature_date'];
+                    // Validate date format before inserting
+                    if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $dateStr)) {
+                        $signatureDate = $dateStr;
+                    } else {
+                        dol_syslog("Invalid signature date format: " . $dateStr, LOG_WARNING);
+                        $signatureDate = null;
+                    }
+                }
                 
                 // Determine signature status
                 if (isset($info['ca_type']) && $info['ca_type'] === 'FINA') {

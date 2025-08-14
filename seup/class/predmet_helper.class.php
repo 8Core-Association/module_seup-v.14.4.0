@@ -407,13 +407,28 @@ class Predmet_helper
             $documentTableHTML .= '<th>Datum</th>';
             $documentTableHTML .= '<th>Kreirao</th>';
             $documentTableHTML .= '<th>Digitalni potpis</th>';
-            $documentTableHTML .= '<th>Digitalni potpis</th>';
             $documentTableHTML .= '<th>Akcije</th>';
             $documentTableHTML .= '</tr>';
             $documentTableHTML .= '</thead>';
             $documentTableHTML .= '<tbody>';
 
             foreach ($documents as $doc) {
+                // Auto-scan PDF for signature if not scanned yet
+                if (isset($doc->filepath) && strtolower(pathinfo($doc->filename, PATHINFO_EXTENSION)) === 'pdf') {
+                    if (!isset($doc->digital_signature) || $doc->digital_signature === null) {
+                        $full_path = DOL_DATA_ROOT . '/ecm/' . rtrim($doc->filepath, '/') . '/' . $doc->filename;
+                        if (file_exists($full_path) && isset($doc->rowid)) {
+                            $scanResult = Digital_Signature_Detector::autoScanOnUpload($db, $conf, $full_path, $doc->rowid);
+                            if ($scanResult['success'] && $scanResult['has_signature']) {
+                                // Refresh document data
+                                $doc->digital_signature = 1;
+                                $doc->signature_status = 'valid';
+                                $doc->signer_name = $scanResult['signature_info']['signer_name'] ?? null;
+                            }
+                        }
+                    }
+                }
+
                 // Handle different document sources
                 if (isset($doc->source) && $doc->source === 'nextcloud') {
                     if ($doc->edit_url) {
@@ -477,6 +492,7 @@ class Predmet_helper
                 $documentTableHTML .= '<div class="seup-document-actions">';
                 
                 // Download button
+                $relative_path = self::getPredmetFolderPath($caseId, $db);
                 $download_url = DOL_URL_ROOT . '/document.php?modulepart=ecm&file=' . urlencode($relative_path . $doc->filename);
                 $documentTableHTML .= '<a href="' . $download_url . '" class="seup-document-btn seup-document-btn-download" target="_blank" title="Preuzmi">';
                 $documentTableHTML .= '<i class="fas fa-download"></i>';
