@@ -328,6 +328,13 @@ class Request_Handler
       
       dol_syslog("handleUploadDocument: ECM record created successfully for file: " . $filename . " with filepath: " . $relative_path, LOG_INFO);
 
+      // Auto-scan for digital signature if it's a PDF
+      require_once __DIR__ . '/digital_signature_detector.class.php';
+      $scanResult = Digital_Signature_Detector::autoScanOnUpload($db, $conf, $fullpath, $result);
+      if ($scanResult['has_signature']) {
+        dol_syslog("Digital signature detected in uploaded file: " . $filename, LOG_INFO);
+      }
+
       setEventMessages($langs->trans("FileUploadSuccess"), null, 'mesgs');
     } catch (Exception $e) {
       setEventMessages($e->getMessage(), null, 'errors');

@@ -382,6 +382,10 @@ class Predmet_helper
      */
     public static function fetchUploadedDocuments($db, $conf, &$documentTableHTML, $langs, $caseId)
     {
+        // Ensure digital signature columns exist
+        require_once __DIR__ . '/digital_signature_detector.class.php';
+        Digital_Signature_Detector::ensureDigitalSignatureColumns($db);
+        
         // Auto-scan ECM if enabled
         if (getDolGlobalString('SEUP_ECM_AUTO_SCAN', '0') === '1') {
             require_once __DIR__ . '/ecm_scanner.class.php';
@@ -402,6 +406,8 @@ class Predmet_helper
             $documentTableHTML .= '<th>Veličina</th>';
             $documentTableHTML .= '<th>Datum</th>';
             $documentTableHTML .= '<th>Kreirao</th>';
+            $documentTableHTML .= '<th>Digitalni potpis</th>';
+            $documentTableHTML .= '<th>Digitalni potpis</th>';
             $documentTableHTML .= '<th>Akcije</th>';
             $documentTableHTML .= '</tr>';
             $documentTableHTML .= '</thead>';
@@ -452,6 +458,20 @@ class Predmet_helper
                 // Created by
                 $created_by = $doc->created_by ?? 'N/A';
                 $documentTableHTML .= '<td><div class="seup-document-user"><i class="fas fa-user me-1"></i>' . htmlspecialchars($created_by) . '</div></td>';
+                
+                // Digital signature status
+                $documentTableHTML .= '<td>';
+                if (isset($doc->digital_signature) && $doc->digital_signature) {
+                    $signatureBadge = Digital_Signature_Detector::getSignatureBadge(
+                        true, 
+                        $doc->signature_status ?? 'unknown',
+                        $doc->signer_name ?? null
+                    );
+                    $documentTableHTML .= $signatureBadge;
+                } else {
+                    $documentTableHTML .= '<span class="seup-signature-none"><i class="fas fa-minus-circle"></i> Nije potpisan</span>';
+                }
+                $documentTableHTML .= '</td>';
                 
                 $documentTableHTML .= '<td>';
                 $documentTableHTML .= '<div class="seup-document-actions">';
@@ -525,6 +545,11 @@ class Predmet_helper
                     ef.filename,
                     ef.filepath,
                     ef.date_c,
+                    ef.digital_signature,
+                    ef.signature_status,
+                    ef.signer_name,
+                    ef.signature_date,
+                    ef.signature_info,
                     CONCAT(u.firstname, ' ', u.lastname) as created_by
                 FROM " . MAIN_DB_PREFIX . "ecm_files ef
                 LEFT JOIN " . MAIN_DB_PREFIX . "user u ON ef.fk_user_c = u.rowid

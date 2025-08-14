@@ -146,6 +146,10 @@ $item->fieldOverride = '<button type="button" id="testNextcloudBtn" class="butto
 $item = $formSetup->newItem('ECM_SCAN_ALL');
 $item->fieldOverride = '<button type="button" id="scanAllEcmBtn" class="button">Scan All ECM Folders</button><div id="scanResult" style="margin-top: 10px;"></div>';
 
+// Digital Signature Scan button
+$item = $formSetup->newItem('SIGNATURE_SCAN_ALL');
+$item->fieldOverride = '<button type="button" id="scanSignaturesBtn" class="button">Scan Digital Signatures</button><div id="signatureResult" style="margin-top: 10px;"></div>';
+
 // End of definition of parameters
 
 
@@ -223,6 +227,18 @@ if ($action == 'scan_all_ecm') {
     
     require_once __DIR__ . '/../class/ecm_scanner.class.php';
     $result = ECM_Scanner::scanAllSeupFolders($db, $conf, $user, 100);
+    
+    echo json_encode($result);
+    exit;
+}
+
+// Handle digital signature scan
+if ($action == 'scan_signatures') {
+    header('Content-Type: application/json');
+    ob_end_clean();
+    
+    require_once __DIR__ . '/../class/digital_signature_detector.class.php';
+    $result = Digital_Signature_Detector::bulkScanSignatures($db, $conf, 100);
     
     echo json_encode($result);
     exit;
@@ -528,6 +544,41 @@ document.addEventListener("DOMContentLoaded", function() {
             .finally(() => {
                 this.disabled = false;
                 this.innerHTML = "<i class=\'fas fa-search\'></i> Scan All ECM Folders";
+            });
+        });
+    }
+    
+    const scanSignaturesBtn = document.getElementById("scanSignaturesBtn");
+    const signatureResult = document.getElementById("signatureResult");
+    
+    if (scanSignaturesBtn) {
+        scanSignaturesBtn.addEventListener("click", function() {
+            this.disabled = true;
+            this.innerHTML = "<i class=\'fas fa-spinner fa-spin\'></i> Skeniram potpise...";
+            signatureResult.innerHTML = "";
+            
+            const formData = new FormData();
+            formData.append("action", "scan_signatures");
+            formData.append("token", "'.newToken().'");
+            
+            fetch("", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    signatureResult.innerHTML = "<div class=\'seup-test-success\'><i class=\'fas fa-check-circle\'></i> " + data.message + "</div>";
+                } else {
+                    signatureResult.innerHTML = "<div class=\'seup-test-error\'><i class=\'fas fa-times-circle\'></i> " + data.error + "</div>";
+                }
+            })
+            .catch(error => {
+                signatureResult.innerHTML = "<div class=\'seup-test-error\'><i class=\'fas fa-times-circle\'></i> Skeniranje potpisa neuspješno</div>";
+            })
+            .finally(() => {
+                this.disabled = false;
+                this.innerHTML = "<i class=\'fas fa-certificate\'></i> Scan Digital Signatures";
             });
         });
     }
